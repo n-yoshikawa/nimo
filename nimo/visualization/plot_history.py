@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
+import numpy as np
 import time
 import collections
 import os
+
+from scipy.spatial import ConvexHull, QhullError
 
 
 def cycle(input_file, num_cycles, fig_folder = None, filename = None, dpi = None):
@@ -143,3 +146,65 @@ def best(input_file, num_cycles, fig_folder = None, filename = None, dpi = None,
         plt.savefig(os.path.join(fig_path, name), dpi = dpi)
         plt.clf()
         plt.close() 
+
+
+def convex_hull(input_file, num_cycles, fig_folder = None, filename = None, dpi = None):
+    """Creating the figure of the convex hull area of observed parameters
+
+    This function do not depend on robot.
+    The area is computed per cycle over every parameter vector observed so
+    far, so the curve shows how much of the parameter space the selection has
+    covered - a diversity measure for algorithms such as BLOX. Only
+    two-dimensional parameter spaces are supported.
+
+    Args:
+        input_file (list[float]): the file for history results
+        num_cycles (int): the number of cycles
+
+    """
+
+    if fig_folder is None:
+        fig_path = "./fig"
+    else:
+        fig_path = fig_folder
+
+    if dpi is None:
+        dpi = 72
+
+    if len(input_file) > 0 and len(input_file[0][1]) != 2:
+        raise ValueError("convex_hull supports exactly 2 parameters, found "
+                         + str(len(input_file[0][1])))
+
+    cycles = list(range(num_cycles + 1))
+    areas = []
+
+    for c in cycles:
+
+        points = np.array([row[1] for row in input_file if row[0] <= c])
+
+        if len(points) < 3:
+            areas.append(0.0)
+            continue
+
+        try:
+            # For a 2D hull, scipy reports the enclosed area as .volume.
+            areas.append(ConvexHull(points).volume)
+        except QhullError:
+            areas.append(0.0)  # collinear points span no area
+
+    if filename is None:
+        dt_now = time.localtime()
+        name = "history_convex_hull_" + time.strftime('%y%m%d%H%M%S', dt_now) + ".png"
+    else:
+        name = filename
+
+    fig = plt.figure()
+
+    plt.scatter(cycles, areas)
+    plt.plot(cycles, areas)
+    plt.xlim(0, num_cycles)
+    plt.xlabel("Cycle")
+    plt.ylabel("Convex hull area")
+    plt.savefig(os.path.join(fig_path, name), dpi = dpi)
+    plt.clf()
+    plt.close()
